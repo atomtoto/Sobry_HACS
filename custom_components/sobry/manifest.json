@@ -1,0 +1,16 @@
+{
+  "domain": "sobry",
+  "name": "Sobry Energy",
+  "codeowners": [
+    "@atomtoto"
+  ],
+  "config_flow": true,
+  "documentation": "https://github.com/atomtoto/Sobry_HACS",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/atomtoto/Sobry_HACS/issues",
+  "loggers": [
+    "custom_components.sobry"
+  ],
+  "requirements": [],
+  "version": "0.1.0"
+}
