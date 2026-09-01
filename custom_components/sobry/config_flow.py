@@ -8,15 +8,18 @@ from homeassistant import config_entries
 from homeassistant.core import callback
 
 from .const import (
+    CONF_API_KEY,
     CONF_DISPLAY,
     CONF_GRANULARITY,
     CONF_PROFIL,
     CONF_SEGMENT,
+    CONF_TAX_MODE,
     CONF_TURPE,
     DEFAULT_DISPLAY,
     DEFAULT_GRANULARITY,
     DEFAULT_PROFIL,
     DEFAULT_SEGMENT,
+    DEFAULT_TAX_MODE,
     DEFAULT_TURPE,
     DOMAIN,
     NAME,
@@ -28,6 +31,7 @@ TURPE_C4 = ["CU", "LU"]
 PROFILS = ["particulier", "pro"]
 DISPLAYS = ["TTC", "HT"]
 GRANULARITIES = ["quarter_hourly", "hourly"]
+TAX_MODES = ["ttc", "ht"]
 
 
 class SobryConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -38,6 +42,12 @@ class SobryConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_user(self, user_input=None):
         """Handle the initial step."""
         if user_input is not None:
+            api_key = (user_input.get(CONF_API_KEY) or "").strip()
+            if api_key:
+                user_input[CONF_API_KEY] = api_key
+            else:
+                user_input.pop(CONF_API_KEY, None)
+
             if user_input[CONF_SEGMENT] == "C4":
                 if user_input[CONF_TURPE] not in TURPE_C4:
                     user_input[CONF_TURPE] = "CU"
@@ -55,6 +65,8 @@ class SobryConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 vol.Required(CONF_PROFIL, default=DEFAULT_PROFIL): vol.In(PROFILS),
                 vol.Required(CONF_DISPLAY, default=DEFAULT_DISPLAY): vol.In(DISPLAYS),
                 vol.Required(CONF_GRANULARITY, default=DEFAULT_GRANULARITY): vol.In(GRANULARITIES),
+                vol.Required(CONF_TAX_MODE, default=DEFAULT_TAX_MODE): vol.In(TAX_MODES),
+                vol.Optional(CONF_API_KEY, default=""): str,
             }
         )
 
@@ -74,6 +86,11 @@ class SobryOptionsFlow(config_entries.OptionsFlow):
 
     async def async_step_init(self, user_input=None):
         if user_input is not None:
+            api_key = (user_input.get(CONF_API_KEY) or "").strip()
+            if api_key:
+                user_input[CONF_API_KEY] = api_key
+            else:
+                user_input.pop(CONF_API_KEY, None)
             return self.async_create_entry(title="", data=user_input)
 
         data = {**self.config_entry.data, **self.config_entry.options}
@@ -90,6 +107,8 @@ class SobryOptionsFlow(config_entries.OptionsFlow):
                     CONF_GRANULARITY,
                     default=data.get(CONF_GRANULARITY, DEFAULT_GRANULARITY),
                 ): vol.In(GRANULARITIES),
+                vol.Required(CONF_TAX_MODE, default=data.get(CONF_TAX_MODE, DEFAULT_TAX_MODE)): vol.In(TAX_MODES),
+                vol.Optional(CONF_API_KEY, default=data.get(CONF_API_KEY, "")): str,
             }
         )
         return self.async_show_form(step_id="init", data_schema=schema)
