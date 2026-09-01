@@ -1,5 +1,20 @@
 {
+  "domain": "sobry",
   "name": "Sobry Energy",
-  "render_readme": true,
-  "homeassistant": "2024.8.0"
+  "codeowners": [
+    "@atomtoto"
+  ],
+  "config_flow": true,
+  "documentation": "https://github.com/atomtoto/Sobry_HACS",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/atomtoto/Sobry_HACS/issues",
+  "loggers": [
+    "custom_components.sobry"
+  ],
+  "requirements": [],
+  "version": "0.1.0",
+  "brands": {
+    "icon": "https://raw.githubusercontent.com/atomtoto/Sobry_HACS/main/custom_components/sobry/icon.png",
+    "logo": "https://raw.githubusercontent.com/atomtoto/Sobry_HACS/main/custom_components/sobry/logo.png"
+  }
 }
