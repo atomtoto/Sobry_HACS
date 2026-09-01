@@ -12,5 +12,9 @@
     "custom_components.sobry"
   ],
   "requirements": [],
-  "version": "0.1.0"
+  "version": "0.1.0",
+  "brands": {
+    "icon": "https://raw.githubusercontent.com/atomtoto/Sobry_HACS/main/custom_components/sobry/icon.png",
+    "logo": "https://raw.githubusercontent.com/atomtoto/Sobry_HACS/main/custom_components/sobry/logo.png"
+  }
 }
