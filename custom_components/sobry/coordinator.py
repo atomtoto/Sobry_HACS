@@ -127,13 +127,27 @@ class SobryDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         except (ClientError, TimeoutError, ValueError) as err:
             raise UpdateFailed(f"Could not fetch Sobry data: {err}") from err
 
-        prices = payload.get("data", [])
+        if isinstance(payload, dict):
+            prices = payload.get("data", [])
+            statistics = payload.get("statistics", {})
+            count = payload.get("count")
+            pricing_metadata = payload.get("pricing_metadata", {})
+        elif isinstance(payload, list):
+            prices = payload
+            statistics = {}
+            count = None
+            pricing_metadata = {}
+        else:
+            raise UpdateFailed("Sobry API returned an unsupported payload format")
+
         if not prices:
             raise UpdateFailed("Sobry API returned no pricing data")
 
         now = dt_util.utcnow()
 
-        def _entry_dt(item: dict[str, Any]) -> datetime | None:
+        def _entry_dt(item: Any) -> datetime | None:
+            if not isinstance(item, dict):
+                return None
             raw_ts = item.get("timestamp")
             if not raw_ts:
                 return None
@@ -162,8 +176,8 @@ class SobryDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         next_item = next((item for item in sorted_prices if (_entry_dt(item) or now) > now), None)
 
-        def _price_value(item: dict[str, Any] | None) -> float | None:
-            if item is None:
+        def _price_value(item: Any) -> float | None:
+            if item is None or not isinstance(item, dict):
                 return None
             if "price_ttc_eur_kwh" in item:
                 return float(item["price_ttc_eur_kwh"])
@@ -189,7 +203,7 @@ class SobryDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "min_price": min(values),
             "max_price": max(values),
             "average_price": mean(values),
-            "statistics": payload.get("statistics", {}),
-            "count": payload.get("count", len(sorted_prices)),
-            "pricing_metadata": payload.get("pricing_metadata", {}),
+            "statistics": statistics,
+            "count": count if count is not None else len(sorted_prices),
+            "pricing_metadata": pricing_metadata,
         }
