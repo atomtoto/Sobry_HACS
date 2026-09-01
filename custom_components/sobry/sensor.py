@@ -73,6 +73,9 @@ class SobryPriceSensor(CoordinatorEntity[SobryDataUpdateCoordinator], SensorEnti
 
         return {
             "current_timestamp": current.get("timestamp"),
+            "current_date": current.get("date"),
+            "current_time": current.get("time"),
+            "price": current.get("price"),
             "spot_price": current.get("spot_price"),
             "spot_price_eur_kwh": current.get("spot_price_eur_kwh"),
             "price_ht_eur_kwh": current.get("price_ht_eur_kwh"),

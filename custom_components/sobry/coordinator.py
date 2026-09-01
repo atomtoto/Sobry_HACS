@@ -6,6 +6,7 @@ from datetime import date, datetime, timedelta
 import logging
 from statistics import mean
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from aiohttp import ClientError
 
@@ -34,6 +35,10 @@ from .const import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+# The V2 API returns a separate ``date`` and ``time`` in the Europe/Paris
+# timezone rather than the ``timestamp`` field used by the legacy endpoint.
+_SOBRY_TIME_ZONE = ZoneInfo("Europe/Paris")
 
 
 class SobryDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -149,18 +154,38 @@ class SobryDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if not isinstance(item, dict):
                 return None
             raw_ts = item.get("timestamp")
-            if not raw_ts:
+            if raw_ts:
+                try:
+                    parsed = datetime.fromisoformat(raw_ts)
+                except (TypeError, ValueError):
+                    return None
+                if parsed.tzinfo is None:
+                    parsed = parsed.replace(tzinfo=dt_util.UTC)
+                return parsed.astimezone(dt_util.UTC)
+
+            # /v2/user/daily-prices returns date (YYYY-MM-DD) and time
+            # (HH:mm), with the time explicitly documented as Europe/Paris.
+            raw_date = item.get("date")
+            raw_time = item.get("time")
+            if not raw_date or not raw_time:
                 return None
             try:
-                parsed = datetime.fromisoformat(raw_ts)
-            except ValueError:
+                parsed = datetime.fromisoformat(f"{raw_date}T{raw_time}")
+            except (TypeError, ValueError):
                 return None
-            if parsed.tzinfo is None:
-                parsed = parsed.replace(tzinfo=dt_util.UTC)
-            return parsed.astimezone(dt_util.UTC)
+            return parsed.replace(tzinfo=_SOBRY_TIME_ZONE).astimezone(dt_util.UTC)
+
+        normalized_prices = []
+        for item in prices:
+            item_dt = _entry_dt(item)
+            if item_dt is None or not isinstance(item, dict):
+                continue
+            # Retain the API fields and provide a consistent timestamp for
+            # sorting and the current-price sensor attributes.
+            normalized_prices.append({**item, "timestamp": item_dt.isoformat()})
 
         sorted_prices = sorted(
-            (item for item in prices if _entry_dt(item) is not None),
+            normalized_prices,
             key=lambda item: _entry_dt(item) or now,
         )
         if not sorted_prices:
@@ -179,14 +204,20 @@ class SobryDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         def _price_value(item: Any) -> float | None:
             if item is None or not isinstance(item, dict):
                 return None
-            if "price_ttc_eur_kwh" in item:
-                return float(item["price_ttc_eur_kwh"])
-            if "price_ht_eur_kwh" in item:
-                return float(item["price_ht_eur_kwh"])
-            if "spot_price_eur_kwh" in item:
-                return float(item["spot_price_eur_kwh"])
-            if "spot_price" in item:
+            for key in (
+                "price",  # V2: EUR/kWh, tax mode selected by the request.
+                "price_ttc_eur_kwh",
+                "price_ht_eur_kwh",
+                "spot_price_eur_kwh",
+            ):
+                try:
+                    return float(item[key])
+                except (KeyError, TypeError, ValueError):
+                    continue
+            try:
                 return float(item["spot_price"]) / 1000.0
+            except (KeyError, TypeError, ValueError):
+                pass
             return None
 
         values = [value for value in (_price_value(item) for item in sorted_prices) if value is not None]
