@@ -1,0 +1,31 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Sobry Energy",
+        "description": "Configure Sobry V2 electricity prices.",
+        "data": {
+          "segment": "Segment",
+          "turpe": "TURPE option",
+          "profil": "Profile",
+          "display": "Display",
+          "granularity": "Granularity"
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Sobry options",
+        "data": {
+          "segment": "Segment",
+          "turpe": "TURPE option",
+          "profil": "Profile",
+          "display": "Display",
+          "granularity": "Granularity"
+        }
+      }
+    }
+  }
+}
