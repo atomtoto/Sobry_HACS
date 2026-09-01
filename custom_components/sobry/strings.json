@@ -9,7 +9,9 @@
           "turpe": "TURPE option",
           "profil": "Profile",
           "display": "Display",
-          "granularity": "Granularity"
+          "granularity": "Granularity",
+          "tax_mode": "Tax mode",
+          "api_key": "Sobry API key"
         }
       }
     }
@@ -23,7 +25,9 @@
           "turpe": "TURPE option",
           "profil": "Profile",
           "display": "Display",
-          "granularity": "Granularity"
+          "granularity": "Granularity",
+          "tax_mode": "Tax mode",
+          "api_key": "Sobry API key"
         }
       }
     }

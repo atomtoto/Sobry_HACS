@@ -17,15 +17,18 @@ from homeassistant.util import dt as dt_util
 
 from .const import (
     API_BASE_URL,
+    CONF_API_KEY,
     CONF_DISPLAY,
     CONF_GRANULARITY,
     CONF_PROFIL,
     CONF_SEGMENT,
+    CONF_TAX_MODE,
     CONF_TURPE,
     DEFAULT_DISPLAY,
     DEFAULT_GRANULARITY,
     DEFAULT_PROFIL,
     DEFAULT_SEGMENT,
+    DEFAULT_TAX_MODE,
     DEFAULT_TURPE,
     DOMAIN,
 )
@@ -50,28 +53,75 @@ class SobryDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Fetch data from Sobry API."""
         data = {**self.entry.data, **self.entry.options}
         segment = data.get(CONF_SEGMENT, DEFAULT_SEGMENT)
-        params = {
-            "start": date.today().isoformat(),
-            "end": (date.today() + timedelta(days=1)).isoformat(),
-            "granularity": data.get(CONF_GRANULARITY, DEFAULT_GRANULARITY),
-            "segment": segment,
-            "turpe": data.get(CONF_TURPE, DEFAULT_TURPE),
-            "profil": data.get(CONF_PROFIL, DEFAULT_PROFIL),
-            "display": data.get(CONF_DISPLAY, DEFAULT_DISPLAY),
-        }
+        granularity = data.get(CONF_GRANULARITY, DEFAULT_GRANULARITY)
+        display = data.get(CONF_DISPLAY, DEFAULT_DISPLAY)
+        tax_mode = (data.get(CONF_TAX_MODE, DEFAULT_TAX_MODE) or DEFAULT_TAX_MODE).lower()
+        api_key = (data.get(CONF_API_KEY) or "").strip()
 
-        if segment == "C4":
-            params["profil"] = "pro"
-            params["display"] = "HT"
+        params: dict[str, Any]
+        headers: dict[str, str] | None = None
 
-        url = f"{API_BASE_URL}/api/prices/raw"
+        if api_key:
+            if segment == "C4":
+                tax_mode = "ht"
+            elif tax_mode not in {"ht", "ttc"}:
+                tax_mode = "ht" if str(display).upper() == "HT" else "ttc"
+
+            params = {
+                "day": date.today().isoformat(),
+                "days": 1,
+                "granularity": "15m" if granularity == "quarter_hourly" else "1h",
+                "taxMode": tax_mode,
+            }
+            headers = {"Authorization": "Bearer " + api_key}
+            url = f"{API_BASE_URL}/v2/user/daily-prices"
+        else:
+            params = {
+                "start": date.today().isoformat(),
+                "end": (date.today() + timedelta(days=1)).isoformat(),
+                "granularity": granularity,
+                "segment": segment,
+                "turpe": data.get(CONF_TURPE, DEFAULT_TURPE),
+                "profil": data.get(CONF_PROFIL, DEFAULT_PROFIL),
+                "display": display,
+            }
+
+            if segment == "C4":
+                params["profil"] = "pro"
+                params["display"] = "HT"
+
+            url = f"{API_BASE_URL}/api/prices/raw"
+
         session = async_get_clientsession(self.hass)
 
         try:
-            async with session.get(url, params=params, timeout=20) as response:
+            async with session.get(url, params=params, headers=headers, timeout=20) as response:
                 if response.status != 200:
-                    body = await response.text()
-                    raise UpdateFailed(f"Sobry API error {response.status}: {body}")
+                    error_code = ""
+                    error_message = ""
+                    body = ""
+                    try:
+                        error_payload = await response.json()
+                        if isinstance(error_payload, dict):
+                            error_code = str(error_payload.get("error", "") or error_payload.get("code", ""))
+                            error_message = str(error_payload.get("message", "") or error_payload.get("detail", ""))
+                    except ValueError:
+                        body = await response.text()
+
+                    if response.status == 401 and api_key:
+                        if (
+                            error_code == "INVALID_API_KEY"
+                            or "INVALID_API_KEY" in error_message
+                            or "INVALID_API_KEY" in body
+                        ):
+                            raise UpdateFailed("Sobry API authentication failed: invalid API key")
+                        raise UpdateFailed("Sobry API authentication failed: unauthorized API key")
+
+                    if response.status == 429:
+                        raise UpdateFailed("Sobry API rate limit reached (HTTP 429), retrying on next refresh")
+
+                    detail = error_message or error_code or body or "unknown error"
+                    raise UpdateFailed(f"Sobry API error {response.status}: {detail}")
 
                 payload = await response.json()
         except (ClientError, TimeoutError, ValueError) as err:
