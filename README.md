@@ -34,8 +34,10 @@ You can set an optional `api_key` in the integration configuration/options flow.
 
 - When `api_key` is set, the integration uses:
   - `GET https://api.sobry.co/v2/user/daily-prices`
-  - Header `Authorization` with a ****** key
+  - Header `Authorization: Bearer <api_key>`
   - No `contractId` query parameter
+  - The V2 `date` and `time` response fields (Europe/Paris) to select the
+    current and next prices
 - When `api_key` is not set, the integration uses the previous endpoint/behavior.
 
 The integration also supports v2 parameters internally:
