@@ -33,16 +33,6 @@ Home Assistant.
 4. Restart Home Assistant
 5. Add **Sobry Energy** from **Settings** → **Devices & Services**
 
-## Brand icon
-
-The integration ships its own brand images in `custom_components/sobry/brand/`
-(`icon.png`, `logo.png`). Home Assistant 2026.3 and later loads them directly
-from the integration folder, and they take priority over the brands CDN.
-
-On Home Assistant versions older than 2026.3, the frontend only reads icons from
-[home-assistant/brands](https://github.com/home-assistant/brands); a custom
-integration has no icon there until the images are submitted to that repository
-under `custom_integrations/sobry/`.
 
 ## Notes
 
@@ -64,3 +54,7 @@ You can set an optional `api_key` in the integration configuration/options flow.
 The integration also supports v2 parameters internally:
 - `granularity` mapped to `15m` or `1h`
 - `taxMode` (`ttc`/`ht`)
+
+## Links
+HACS Validation : https://github.com/atomtoto/Sobry_HACS/actions/runs/34109321499/job/101701623660
+hassfest Validation : https://github.com/atomtoto/Sobry_HACS/actions/runs/34109321473/job/101701623516
