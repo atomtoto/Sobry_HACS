@@ -1,0 +1,62 @@
+get_cheapest_slots:
+  fields:
+    config_entry_id:
+      required: false
+      selector:
+        config_entry:
+          integration: sobry
+    mode:
+      required: false
+      default: cheapest_slots
+      selector:
+        select:
+          translation_key: plan_mode
+          mode: dropdown
+          options:
+            - cheapest_slots
+            - cheapest_block
+            - threshold
+    hours:
+      required: false
+      default: 8
+      example: 8
+      selector:
+        number:
+          min: 0
+          max: 24
+          step: 0.25
+          mode: box
+          unit_of_measurement: h
+    window_start:
+      required: false
+      example: "22:00:00"
+      selector:
+        time:
+    window_end:
+      required: false
+      example: "06:00:00"
+      selector:
+        time:
+    max_price:
+      required: false
+      example: 0.2
+      selector:
+        number:
+          min: -5
+          max: 5
+          step: 0.001
+          mode: box
+    threshold_price:
+      required: false
+      example: 0.15
+      selector:
+        number:
+          min: -5
+          max: 5
+          step: 0.001
+          mode: box
+    require_complete_data:
+      required: false
+      default: false
+      selector:
+        boolean:

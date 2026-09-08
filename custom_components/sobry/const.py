@@ -18,6 +18,36 @@ DEFAULT_DISPLAY = "TTC"
 DEFAULT_GRANULARITY = "quarter_hourly"
 DEFAULT_TAX_MODE = "ttc"
 
-PLATFORMS = ["sensor"]
+PLATFORMS = ["binary_sensor", "number", "sensor", "switch"]
 
 API_BASE_URL = "https://api.sobry.co"
+
+# --- Device control plans -------------------------------------------------
+# A plan decides when an appliance should run, based on the price series.
+
+CONF_PLANS = "plans"
+CONF_PLAN_ID = "plan_id"
+CONF_MODE = "mode"
+CONF_HOURS = "hours"
+CONF_WINDOW_START = "window_start"
+CONF_WINDOW_END = "window_end"
+CONF_TARGET_ENTITY = "target_entity"
+CONF_MAX_PRICE = "max_price"
+CONF_THRESHOLD_PRICE = "threshold_price"
+CONF_REQUIRE_COMPLETE_DATA = "require_complete_data"
+
+MODE_CHEAPEST_SLOTS = "cheapest_slots"
+MODE_CHEAPEST_BLOCK = "cheapest_block"
+MODE_THRESHOLD = "threshold"
+PLAN_MODES = [MODE_CHEAPEST_SLOTS, MODE_CHEAPEST_BLOCK, MODE_THRESHOLD]
+
+DEFAULT_HOURS = 8.0
+DEFAULT_WINDOW_START = "00:00:00"
+DEFAULT_WINDOW_END = "00:00:00"
+DEFAULT_THRESHOLD_PRICE = 0.15
+DEFAULT_REQUIRE_COMPLETE_DATA = True
+
+MAX_HOURS = 24.0
+MAX_PRICE_LIMIT = 5.0
+
+SERVICE_GET_CHEAPEST_SLOTS = "get_cheapest_slots"

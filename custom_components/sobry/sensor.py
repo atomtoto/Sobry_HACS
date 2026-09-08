@@ -2,17 +2,25 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
-from homeassistant.components.sensor import SensorEntity
+from homeassistant.components.sensor import (
+    SensorDeviceClass,
+    SensorEntity,
+    SensorStateClass,
+)
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CURRENCY_EURO
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity import Entity
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
 from .coordinator import SobryDataUpdateCoordinator
+from .entity import SobryPlanEntity
+from .plan import SobryPlan, SobryRuntimeData
 
 
 async def async_setup_entry(
@@ -21,17 +29,23 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up Sobry sensor entities."""
-    coordinator: SobryDataUpdateCoordinator = hass.data[DOMAIN][entry.entry_id]
+    runtime: SobryRuntimeData = hass.data[DOMAIN][entry.entry_id]
+    coordinator = runtime.coordinator
 
-    async_add_entities(
-        [
-            SobryPriceSensor(coordinator, entry, "current_price", "Current price"),
-            SobryPriceSensor(coordinator, entry, "next_price", "Next price"),
-            SobryPriceSensor(coordinator, entry, "min_price", "Minimum price"),
-            SobryPriceSensor(coordinator, entry, "max_price", "Maximum price"),
-            SobryPriceSensor(coordinator, entry, "average_price", "Average price"),
-        ]
-    )
+    entities: list[Entity] = [
+        SobryPriceSensor(coordinator, entry, "current_price", "Current price"),
+        SobryPriceSensor(coordinator, entry, "next_price", "Next price"),
+        SobryPriceSensor(coordinator, entry, "min_price", "Minimum price"),
+        SobryPriceSensor(coordinator, entry, "max_price", "Maximum price"),
+        SobryPriceSensor(coordinator, entry, "average_price", "Average price"),
+    ]
+
+    for plan in runtime.plans:
+        entities.append(SobryPlanNextStartSensor(plan))
+        entities.append(SobryPlanNextEndSensor(plan))
+        entities.append(SobryPlanAveragePriceSensor(plan))
+
+    async_add_entities(entities)
 
 
 class SobryPriceSensor(CoordinatorEntity[SobryDataUpdateCoordinator], SensorEntity):
@@ -86,3 +100,63 @@ class SobryPriceSensor(CoordinatorEntity[SobryDataUpdateCoordinator], SensorEnti
             "count": self.coordinator.data.get("count"),
             "all_prices": prices,
         }
+
+
+class SobryPlanSensor(SobryPlanEntity, SensorEntity):
+    """Base sensor exposing a value computed by a plan."""
+
+    @property
+    def available(self) -> bool:
+        """Return whether prices are known."""
+        return self._plan.available
+
+
+class SobryPlanNextStartSensor(SobryPlanSensor):
+    """Next moment the appliance is scheduled to start."""
+
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+    _attr_translation_key = "plan_next_start"
+
+    def __init__(self, plan: SobryPlan) -> None:
+        """Initialise the next start sensor."""
+        super().__init__(plan, "next_start")
+
+    @property
+    def native_value(self) -> datetime | None:
+        """Return the start of the next planned run."""
+        return self._plan.next_start
+
+
+class SobryPlanNextEndSensor(SobryPlanSensor):
+    """End of the running window, or of the next planned one."""
+
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+    _attr_translation_key = "plan_next_end"
+
+    def __init__(self, plan: SobryPlan) -> None:
+        """Initialise the next end sensor."""
+        super().__init__(plan, "next_end")
+
+    @property
+    def native_value(self) -> datetime | None:
+        """Return when the appliance is scheduled to stop."""
+        return self._plan.next_end
+
+
+class SobryPlanAveragePriceSensor(SobryPlanSensor):
+    """Average price of the slots the plan selected."""
+
+    _attr_native_unit_of_measurement = f"{CURRENCY_EURO}/kWh"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_translation_key = "plan_average_price"
+    _attr_suggested_display_precision = 4
+
+    def __init__(self, plan: SobryPlan) -> None:
+        """Initialise the planned price sensor."""
+        super().__init__(plan, "average_price")
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the average price of the planned slots."""
+        value = self._plan.average_price
+        return None if value is None else round(value, 6)
