@@ -1,0 +1,195 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Sobry Energy",
+        "description": "Configurez les prix de l'électricité Sobry V2.",
+        "data": {
+          "segment": "Segment",
+          "turpe": "Option TURPE",
+          "profil": "Profil",
+          "display": "Affichage",
+          "granularity": "Granularité",
+          "tax_mode": "Mode de taxation",
+          "api_key": "Clé API Sobry"
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "Sobry Energy est déjà configuré."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Options Sobry",
+        "description": "Modifiez les paramètres tarifaires ou gérez les appareils pilotés par le prix du marché.",
+        "menu_options": {
+          "settings": "Paramètres tarifaires",
+          "add_plan": "Ajouter un appareil",
+          "edit_plan": "Modifier un appareil",
+          "remove_plan": "Supprimer un appareil"
+        }
+      },
+      "settings": {
+        "title": "Paramètres tarifaires",
+        "data": {
+          "segment": "Segment",
+          "turpe": "Option TURPE",
+          "profil": "Profil",
+          "display": "Affichage",
+          "granularity": "Granularité",
+          "tax_mode": "Mode de taxation",
+          "api_key": "Clé API Sobry"
+        }
+      },
+      "add_plan": {
+        "title": "Ajouter un appareil",
+        "description": "Sobry sélectionne les créneaux les moins chers de la journée et pilote l'entité que vous choisissez.",
+        "data": {
+          "name": "Nom",
+          "mode": "Mode de sélection",
+          "target_entity": "Entité à piloter",
+          "hours": "Durée de fonctionnement",
+          "window_start": "Début de la plage",
+          "window_end": "Fin de la plage",
+          "max_price": "Prix maximum",
+          "threshold_price": "Prix seuil",
+          "require_complete_data": "Attendre que toute la plage soit tarifée"
+        },
+        "data_description": {
+          "name": "Sert de nom d'appareil, par exemple « Chauffe-eau ».",
+          "target_entity": "Si vous la laissez vide, le plan expose seulement un capteur binaire à utiliser dans vos propres automatisations.",
+          "hours": "Durée quotidienne à programmer dans la plage.",
+          "window_start": "Début de la plage quotidienne dans laquelle Sobry peut choisir les créneaux. Indiquez le même début et la même fin pour une journée entière.",
+          "window_end": "Fin de la plage quotidienne. Une fin antérieure au début correspond à une plage de nuit.",
+          "max_price": "Aucun créneau au-dessus de ce prix n'est retenu. Laissez vide pour toujours programmer la durée demandée.",
+          "threshold_price": "Utilisé uniquement par le mode « sous un prix seuil ».",
+          "require_complete_data": "Laisse l'appareil à l'arrêt tant que tous les prix de la plage ne sont pas publiés, pour ne pas manquer les créneaux les moins chers."
+        }
+      },
+      "edit_plan": {
+        "title": "Modifier un appareil",
+        "data": {
+          "plan_id": "Appareil"
+        }
+      },
+      "plan_settings": {
+        "title": "Modifier {name}",
+        "data": {
+          "name": "Nom",
+          "mode": "Mode de sélection",
+          "target_entity": "Entité à piloter",
+          "hours": "Durée de fonctionnement",
+          "window_start": "Début de la plage",
+          "window_end": "Fin de la plage",
+          "max_price": "Prix maximum",
+          "threshold_price": "Prix seuil",
+          "require_complete_data": "Attendre que toute la plage soit tarifée"
+        },
+        "data_description": {
+          "name": "Sert de nom d'appareil, par exemple « Chauffe-eau ».",
+          "target_entity": "Si vous la laissez vide, le plan expose seulement un capteur binaire à utiliser dans vos propres automatisations.",
+          "hours": "Durée quotidienne à programmer dans la plage.",
+          "window_start": "Début de la plage quotidienne dans laquelle Sobry peut choisir les créneaux. Indiquez le même début et la même fin pour une journée entière.",
+          "window_end": "Fin de la plage quotidienne. Une fin antérieure au début correspond à une plage de nuit.",
+          "max_price": "Aucun créneau au-dessus de ce prix n'est retenu. Laissez vide pour toujours programmer la durée demandée.",
+          "threshold_price": "Utilisé uniquement par le mode « sous un prix seuil ».",
+          "require_complete_data": "Laisse l'appareil à l'arrêt tant que tous les prix de la plage ne sont pas publiés, pour ne pas manquer les créneaux les moins chers."
+        }
+      },
+      "remove_plan": {
+        "title": "Supprimer un appareil",
+        "data": {
+          "plans": "Appareils à supprimer"
+        }
+      }
+    },
+    "error": {
+      "name_required": "Un nom est obligatoire."
+    }
+  },
+  "selector": {
+    "plan_mode": {
+      "options": {
+        "cheapest_slots": "Créneaux les moins chers de la plage",
+        "cheapest_block": "Plage continue la moins chère",
+        "threshold": "Sous un prix seuil"
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "plan_next_start": {
+        "name": "Prochain démarrage"
+      },
+      "plan_next_end": {
+        "name": "Prochain arrêt"
+      },
+      "plan_average_price": {
+        "name": "Prix moyen planifié"
+      }
+    },
+    "number": {
+      "plan_hours": {
+        "name": "Durée de fonctionnement"
+      },
+      "plan_threshold_price": {
+        "name": "Prix seuil"
+      }
+    },
+    "switch": {
+      "plan_control": {
+        "name": "Pilotage automatique"
+      }
+    }
+  },
+  "services": {
+    "get_cheapest_slots": {
+      "name": "Obtenir les créneaux les moins chers",
+      "description": "Renvoie les créneaux les moins chers d'une plage quotidienne, sans créer d'appareil.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Entrée Sobry",
+          "description": "Entrée de configuration Sobry dont les prix sont utilisés."
+        },
+        "mode": {
+          "name": "Mode de sélection",
+          "description": "Manière de choisir les créneaux dans la plage."
+        },
+        "hours": {
+          "name": "Durée",
+          "description": "Nombre d'heures à sélectionner."
+        },
+        "window_start": {
+          "name": "Début de la plage",
+          "description": "Début de la plage quotidienne. Indiquez le même début et la même fin pour une journée entière."
+        },
+        "window_end": {
+          "name": "Fin de la plage",
+          "description": "Fin de la plage quotidienne. Une fin antérieure au début correspond à une plage de nuit."
+        },
+        "max_price": {
+          "name": "Prix maximum",
+          "description": "Ne jamais retenir un créneau au-dessus de ce prix."
+        },
+        "threshold_price": {
+          "name": "Prix seuil",
+          "description": "Prix sous lequel les créneaux sont retenus, pour le mode seuil."
+        },
+        "require_complete_data": {
+          "name": "Exiger des prix complets",
+          "description": "Ne rien renvoyer tant que tous les prix de la plage ne sont pas publiés."
+        }
+      }
+    }
+  },
+  "exceptions": {
+    "entry_not_loaded": {
+      "message": "Aucune entrée de configuration Sobry chargée n'a été trouvée."
+    },
+    "no_prices": {
+      "message": "Aucun prix Sobry n'est disponible pour le moment."
+    }
+  }
+}

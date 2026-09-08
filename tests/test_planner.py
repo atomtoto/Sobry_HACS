@@ -1,0 +1,248 @@
+"""Tests for the Sobry planning helpers.
+
+The planner has no Home Assistant dependency, so it is loaded directly from
+its path and can be exercised with ``python3 -m unittest``.
+"""
+
+from __future__ import annotations
+
+import importlib.util
+import sys
+import unittest
+from datetime import datetime, time, timedelta, timezone
+from pathlib import Path
+from zoneinfo import ZoneInfo
+
+_MODULE_PATH = (
+    Path(__file__).resolve().parents[1] / "custom_components" / "sobry" / "planner.py"
+)
+_SPEC = importlib.util.spec_from_file_location("sobry_planner", _MODULE_PATH)
+assert _SPEC is not None and _SPEC.loader is not None
+planner = importlib.util.module_from_spec(_SPEC)
+sys.modules["sobry_planner"] = planner
+_SPEC.loader.exec_module(planner)
+
+PARIS = ZoneInfo("Europe/Paris")
+
+
+def _series(day: str, prices: list[float], step_minutes: int = 60) -> list[dict]:
+    """Build raw API entries starting at local midnight of ``day``."""
+    start = datetime.fromisoformat(f"{day}T00:00:00").replace(tzinfo=PARIS)
+    return [
+        {
+            "timestamp": (start + timedelta(minutes=step_minutes * index))
+            .astimezone(timezone.utc)
+            .isoformat(),
+            "price": price,
+        }
+        for index, price in enumerate(prices)
+    ]
+
+
+def _local(value: str) -> datetime:
+    return datetime.fromisoformat(value).replace(tzinfo=PARIS)
+
+
+def _hours_of(result) -> list[int]:
+    return sorted(slot.start.astimezone(PARIS).hour for slot in result.selected)
+
+
+class TestSlots(unittest.TestCase):
+    def test_build_slots_infers_step(self) -> None:
+        slots = planner.build_slots(_series("2026-01-15", [1.0] * 96, step_minutes=15))
+        self.assertEqual(len(slots), 96)
+        self.assertEqual(slots[0].duration, timedelta(minutes=15))
+        self.assertEqual(slots[-1].end - slots[0].start, timedelta(days=1))
+
+    def test_build_slots_handles_holes_and_duplicates(self) -> None:
+        raw = _series("2026-01-15", [1.0, 2.0, 3.0])
+        raw.append(dict(raw[1]))  # duplicated timestamp
+        raw.append(
+            {
+                "timestamp": _local("2026-01-15T06:00:00").astimezone(timezone.utc).isoformat(),
+                "price": 4.0,
+            }
+        )
+        slots = planner.build_slots(raw)
+        self.assertEqual(len(slots), 4)
+        self.assertTrue(all(slot.duration == timedelta(hours=1) for slot in slots))
+
+    def test_extract_price_fallbacks(self) -> None:
+        self.assertEqual(planner.extract_price({"price": "0.12"}), 0.12)
+        self.assertEqual(planner.extract_price({"price_ttc_eur_kwh": 0.2}), 0.2)
+        self.assertAlmostEqual(planner.extract_price({"spot_price": 80}), 0.08)
+        self.assertIsNone(planner.extract_price({"nope": 1}))
+
+
+class TestPeriodBounds(unittest.TestCase):
+    def test_full_day(self) -> None:
+        start, end = planner.period_bounds(
+            _local("2026-01-15T10:00:00"), time(0, 0), time(0, 0), PARIS
+        )
+        self.assertEqual(start, _local("2026-01-15T00:00:00"))
+        self.assertEqual(end, _local("2026-01-16T00:00:00"))
+
+    def test_day_starting_at_six(self) -> None:
+        start, _end = planner.period_bounds(
+            _local("2026-01-15T02:00:00"), time(6, 0), time(6, 0), PARIS
+        )
+        self.assertEqual(start, _local("2026-01-14T06:00:00"))
+
+    def test_daytime_window_rolls_to_tomorrow(self) -> None:
+        start, end = planner.period_bounds(
+            _local("2026-01-15T13:00:00"), time(8, 0), time(12, 0), PARIS
+        )
+        self.assertEqual(start, _local("2026-01-16T08:00:00"))
+        self.assertEqual(end, _local("2026-01-16T12:00:00"))
+
+    def test_overnight_window(self) -> None:
+        start, end = planner.period_bounds(
+            _local("2026-01-15T23:00:00"), time(22, 0), time(6, 0), PARIS
+        )
+        self.assertEqual(start, _local("2026-01-15T22:00:00"))
+        self.assertEqual(end, _local("2026-01-16T06:00:00"))
+
+        start, end = planner.period_bounds(
+            _local("2026-01-15T03:00:00"), time(22, 0), time(6, 0), PARIS
+        )
+        self.assertEqual(start, _local("2026-01-14T22:00:00"))
+        self.assertEqual(end, _local("2026-01-15T06:00:00"))
+
+
+class TestPlanning(unittest.TestCase):
+    def setUp(self) -> None:
+        # Cheapest hours of the day: 0h to 5h (0.05) then 13h to 15h (0.06).
+        prices = [0.05] * 6 + [0.30] * 7 + [0.06] * 3 + [0.40] * 8
+        self.slots = planner.build_slots(_series("2026-01-15", prices))
+
+    def test_cheapest_slots_picks_eight_cheapest_hours(self) -> None:
+        result = planner.build_plan(
+            self.slots,
+            _local("2026-01-15T09:00:00"),
+            PARIS,
+            mode=planner.MODE_CHEAPEST_SLOTS,
+            hours=8,
+        )
+        self.assertTrue(result.data_complete)
+        self.assertEqual(_hours_of(result), [0, 1, 2, 3, 4, 5, 13, 14])
+        self.assertEqual(result.selected_hours, 8)
+        self.assertEqual(len(result.windows), 2)
+        self.assertFalse(result.is_active(_local("2026-01-15T09:00:00")))
+        self.assertTrue(result.is_active(_local("2026-01-15T13:30:00")))
+        self.assertEqual(
+            result.next_transition(_local("2026-01-15T09:00:00")),
+            _local("2026-01-15T13:00:00"),
+        )
+        self.assertEqual(
+            result.next_transition(_local("2026-01-15T13:30:00")),
+            _local("2026-01-15T15:00:00"),
+        )
+
+    def test_cheapest_block_is_contiguous(self) -> None:
+        result = planner.build_plan(
+            self.slots,
+            _local("2026-01-15T09:00:00"),
+            PARIS,
+            mode=planner.MODE_CHEAPEST_BLOCK,
+            hours=8,
+        )
+        self.assertEqual(len(result.windows), 1)
+        self.assertEqual(result.windows[0].start, _local("2026-01-15T00:00:00"))
+        self.assertEqual(result.windows[0].hours, 8)
+
+    def test_max_price_caps_the_selection(self) -> None:
+        result = planner.build_plan(
+            self.slots,
+            _local("2026-01-15T09:00:00"),
+            PARIS,
+            mode=planner.MODE_CHEAPEST_SLOTS,
+            hours=10,
+            max_price=0.10,
+        )
+        self.assertEqual(_hours_of(result), [0, 1, 2, 3, 4, 5, 13, 14, 15])
+        self.assertEqual(result.selected_hours, 9)
+
+    def test_threshold_mode(self) -> None:
+        result = planner.build_plan(
+            self.slots,
+            _local("2026-01-15T09:00:00"),
+            PARIS,
+            mode=planner.MODE_THRESHOLD,
+            threshold_price=0.055,
+        )
+        self.assertEqual(_hours_of(result), [0, 1, 2, 3, 4, 5])
+
+    def test_incomplete_data_holds_off(self) -> None:
+        partial = planner.build_slots(_series("2026-01-15", [0.05] * 4))
+        result = planner.build_plan(
+            partial,
+            _local("2026-01-15T01:00:00"),
+            PARIS,
+            hours=2,
+        )
+        self.assertFalse(result.data_complete)
+        self.assertEqual(result.selected, [])
+        self.assertEqual(result.reason, "waiting_for_prices")
+
+        allowed = planner.build_plan(
+            partial,
+            _local("2026-01-15T01:00:00"),
+            PARIS,
+            hours=2,
+            require_complete_data=False,
+        )
+        self.assertEqual(allowed.selected_hours, 2)
+
+    def test_overnight_window_uses_tomorrow_prices(self) -> None:
+        prices = [0.30] * 22 + [0.20, 0.20]
+        slots = planner.build_slots(
+            _series("2026-01-15", prices) + _series("2026-01-16", [0.01] * 24)
+        )
+        result = planner.build_plan(
+            slots,
+            _local("2026-01-15T21:00:00"),
+            PARIS,
+            hours=4,
+            window_start=time(22, 0),
+            window_end=time(6, 0),
+        )
+        self.assertTrue(result.data_complete)
+        self.assertEqual(_hours_of(result), [0, 1, 2, 3])
+        self.assertEqual(result.windows[0].start, _local("2026-01-16T00:00:00"))
+
+    def test_next_period_is_planned_when_available(self) -> None:
+        slots = planner.build_slots(
+            _series("2026-01-15", [0.10] * 24) + _series("2026-01-16", [0.20] * 24)
+        )
+        result = planner.build_plan(
+            slots,
+            _local("2026-01-15T23:30:00"),
+            PARIS,
+            hours=2,
+        )
+        # Ties are resolved on the earliest slot, so today runs at 00:00 and
+        # tomorrow's occurrence is planned too.
+        self.assertEqual(
+            result.next_transition(_local("2026-01-15T23:30:00")),
+            _local("2026-01-16T00:00:00"),
+        )
+        self.assertEqual(result.selected_hours, 4)
+
+    def test_quarter_hourly_series(self) -> None:
+        prices = [0.4] * 96
+        for index in range(8, 16):  # 02:00 -> 04:00
+            prices[index] = 0.01
+        slots = planner.build_slots(_series("2026-01-15", prices, step_minutes=15))
+        result = planner.build_plan(
+            slots,
+            _local("2026-01-15T00:30:00"),
+            PARIS,
+            hours=2,
+        )
+        self.assertEqual(result.selected_hours, 2)
+        self.assertEqual(result.windows[0].start, _local("2026-01-15T02:00:00"))
+        self.assertEqual(result.windows[0].end, _local("2026-01-15T04:00:00"))
+
+
+if __name__ == "__main__":
+    unittest.main()

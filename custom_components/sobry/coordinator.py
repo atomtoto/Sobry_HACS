@@ -33,6 +33,7 @@ from .const import (
     DEFAULT_TURPE,
     DOMAIN,
 )
+from .planner import PriceSlot, build_slots, extract_price
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -47,6 +48,8 @@ class SobryDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         self.hass = hass
         self.entry = entry
+        self._slots: list[PriceSlot] = []
+        self._slots_source: list[Any] | None = None
         super().__init__(
             hass,
             _LOGGER,
@@ -54,9 +57,29 @@ class SobryDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             update_interval=timedelta(minutes=15),
         )
 
+    @property
+    def settings(self) -> dict[str, Any]:
+        """Return the merged config entry data and options."""
+        return {**self.entry.data, **self.entry.options}
+
+    @property
+    def slot_duration(self) -> timedelta:
+        """Return the expected length of a price slot."""
+        granularity = self.settings.get(CONF_GRANULARITY, DEFAULT_GRANULARITY)
+        return timedelta(hours=1) if granularity == "hourly" else timedelta(minutes=15)
+
+    @property
+    def price_slots(self) -> list[PriceSlot]:
+        """Return the price series as planning slots, rebuilt on new data."""
+        prices = (self.data or {}).get("prices") or []
+        if self._slots_source is not prices:
+            self._slots = build_slots(prices, self.slot_duration)
+            self._slots_source = prices
+        return self._slots
+
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch data from Sobry API."""
-        data = {**self.entry.data, **self.entry.options}
+        data = self.settings
         segment = data.get(CONF_SEGMENT, DEFAULT_SEGMENT)
         granularity = data.get(CONF_GRANULARITY, DEFAULT_GRANULARITY)
         display = data.get(CONF_DISPLAY, DEFAULT_DISPLAY)
@@ -201,26 +224,7 @@ class SobryDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         next_item = next((item for item in sorted_prices if (_entry_dt(item) or now) > now), None)
 
-        def _price_value(item: Any) -> float | None:
-            if item is None or not isinstance(item, dict):
-                return None
-            for key in (
-                "price",  # V2: EUR/kWh, tax mode selected by the request.
-                "price_ttc_eur_kwh",
-                "price_ht_eur_kwh",
-                "spot_price_eur_kwh",
-            ):
-                try:
-                    return float(item[key])
-                except (KeyError, TypeError, ValueError):
-                    continue
-            try:
-                return float(item["spot_price"]) / 1000.0
-            except (KeyError, TypeError, ValueError):
-                pass
-            return None
-
-        values = [value for value in (_price_value(item) for item in sorted_prices) if value is not None]
+        values = [value for value in (extract_price(item) for item in sorted_prices) if value is not None]
         if not values:
             raise UpdateFailed("Sobry API returned no usable price values")
 
@@ -229,8 +233,8 @@ class SobryDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "prices": sorted_prices,
             "current": current,
             "next": next_item,
-            "current_price": _price_value(current),
-            "next_price": _price_value(next_item),
+            "current_price": extract_price(current),
+            "next_price": extract_price(next_item),
             "min_price": min(values),
             "max_price": max(values),
             "average_price": mean(values),

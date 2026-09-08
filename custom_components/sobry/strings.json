@@ -14,12 +14,25 @@
           "api_key": "Sobry API key"
         }
       }
+    },
+    "abort": {
+      "already_configured": "Sobry Energy is already configured."
     }
   },
   "options": {
     "step": {
       "init": {
         "title": "Sobry options",
+        "description": "Change the pricing settings or manage the appliances driven by the market price.",
+        "menu_options": {
+          "settings": "Pricing settings",
+          "add_plan": "Add an appliance",
+          "edit_plan": "Edit an appliance",
+          "remove_plan": "Remove an appliance"
+        }
+      },
+      "settings": {
+        "title": "Pricing settings",
         "data": {
           "segment": "Segment",
           "turpe": "TURPE option",
@@ -29,7 +42,154 @@
           "tax_mode": "Tax mode",
           "api_key": "Sobry API key"
         }
+      },
+      "add_plan": {
+        "title": "Add an appliance",
+        "description": "Sobry picks the cheapest slots of the day and drives the entity you select.",
+        "data": {
+          "name": "Name",
+          "mode": "Selection mode",
+          "target_entity": "Entity to control",
+          "hours": "Runtime",
+          "window_start": "Window start",
+          "window_end": "Window end",
+          "max_price": "Maximum price",
+          "threshold_price": "Price threshold",
+          "require_complete_data": "Wait for the whole window to be priced"
+        },
+        "data_description": {
+          "name": "Used as the device name, for instance \"Water heater\".",
+          "target_entity": "Left empty, the plan only publishes a binary sensor you can use in your own automations.",
+          "hours": "Daily runtime to schedule during the window.",
+          "window_start": "Start of the daily window Sobry may pick slots in. Keep the same start and end for a full day.",
+          "window_end": "End of the daily window. A window ending before it starts runs overnight.",
+          "max_price": "Slots above this price are never selected. Leave empty to always run the requested hours.",
+          "threshold_price": "Used by the \"below a price threshold\" mode only.",
+          "require_complete_data": "Hold the appliance off until every price of the window is published, so the cheapest slots are not missed."
+        }
+      },
+      "edit_plan": {
+        "title": "Edit an appliance",
+        "data": {
+          "plan_id": "Appliance"
+        }
+      },
+      "plan_settings": {
+        "title": "Edit {name}",
+        "data": {
+          "name": "Name",
+          "mode": "Selection mode",
+          "target_entity": "Entity to control",
+          "hours": "Runtime",
+          "window_start": "Window start",
+          "window_end": "Window end",
+          "max_price": "Maximum price",
+          "threshold_price": "Price threshold",
+          "require_complete_data": "Wait for the whole window to be priced"
+        },
+        "data_description": {
+          "name": "Used as the device name, for instance \"Water heater\".",
+          "target_entity": "Left empty, the plan only publishes a binary sensor you can use in your own automations.",
+          "hours": "Daily runtime to schedule during the window.",
+          "window_start": "Start of the daily window Sobry may pick slots in. Keep the same start and end for a full day.",
+          "window_end": "End of the daily window. A window ending before it starts runs overnight.",
+          "max_price": "Slots above this price are never selected. Leave empty to always run the requested hours.",
+          "threshold_price": "Used by the \"below a price threshold\" mode only.",
+          "require_complete_data": "Hold the appliance off until every price of the window is published, so the cheapest slots are not missed."
+        }
+      },
+      "remove_plan": {
+        "title": "Remove an appliance",
+        "data": {
+          "plans": "Appliances to remove"
+        }
       }
+    },
+    "error": {
+      "name_required": "A name is required."
+    }
+  },
+  "selector": {
+    "plan_mode": {
+      "options": {
+        "cheapest_slots": "Cheapest slots of the window",
+        "cheapest_block": "Cheapest continuous block",
+        "threshold": "Below a price threshold"
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "plan_next_start": {
+        "name": "Next start"
+      },
+      "plan_next_end": {
+        "name": "Next end"
+      },
+      "plan_average_price": {
+        "name": "Planned average price"
+      }
+    },
+    "number": {
+      "plan_hours": {
+        "name": "Runtime"
+      },
+      "plan_threshold_price": {
+        "name": "Price threshold"
+      }
+    },
+    "switch": {
+      "plan_control": {
+        "name": "Automatic control"
+      }
+    }
+  },
+  "services": {
+    "get_cheapest_slots": {
+      "name": "Get the cheapest slots",
+      "description": "Returns the cheapest price slots of a daily window, without creating an appliance.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Sobry entry",
+          "description": "Sobry configuration entry to read the prices from."
+        },
+        "mode": {
+          "name": "Selection mode",
+          "description": "How the slots are picked inside the window."
+        },
+        "hours": {
+          "name": "Runtime",
+          "description": "Number of hours to select."
+        },
+        "window_start": {
+          "name": "Window start",
+          "description": "Start of the daily window. Keep the same start and end for a full day."
+        },
+        "window_end": {
+          "name": "Window end",
+          "description": "End of the daily window. A window ending before it starts runs overnight."
+        },
+        "max_price": {
+          "name": "Maximum price",
+          "description": "Never select a slot above this price."
+        },
+        "threshold_price": {
+          "name": "Price threshold",
+          "description": "Price under which slots are selected, for the threshold mode."
+        },
+        "require_complete_data": {
+          "name": "Require complete prices",
+          "description": "Return nothing until every price of the window is published."
+        }
+      }
+    }
+  },
+  "exceptions": {
+    "entry_not_loaded": {
+      "message": "No loaded Sobry configuration entry was found."
+    },
+    "no_prices": {
+      "message": "No Sobry price is available yet."
     }
   }
 }
