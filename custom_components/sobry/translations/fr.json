@@ -51,8 +51,11 @@
           "mode": "Mode de sélection",
           "target_entity": "Entité à piloter",
           "hours": "Durée de fonctionnement",
+          "extra_hours": "Prolongation après les créneaux",
           "window_start": "Début de la plage",
           "window_end": "Fin de la plage",
+          "fallback_start": "Début du repli",
+          "fallback_end": "Fin du repli",
           "max_price": "Prix maximum",
           "threshold_price": "Prix seuil",
           "require_complete_data": "Attendre que toute la plage soit tarifée"
@@ -61,10 +64,13 @@
           "name": "Sert de nom d'appareil, par exemple « Chauffe-eau ».",
           "target_entity": "Si vous la laissez vide, le plan expose seulement un capteur binaire à utiliser dans vos propres automatisations.",
           "hours": "Durée quotidienne à programmer dans la plage.",
+          "extra_hours": "Maintient l'appareil en marche pendant cette durée après le dernier créneau retenu, quel que soit le prix. Utile pour un chauffe-eau dont on ne connaît pas la température, pour être sûr qu'il a fini de chauffer.",
           "window_start": "Début de la plage quotidienne dans laquelle Sobry peut choisir les créneaux. Indiquez le même début et la même fin pour une journée entière.",
           "window_end": "Fin de la plage quotidienne. Une fin antérieure au début correspond à une plage de nuit.",
           "max_price": "Aucun créneau au-dessus de ce prix n'est retenu. Laissez vide pour toujours programmer la durée demandée.",
           "threshold_price": "Utilisé uniquement par le mode « sous un prix seuil ».",
+          "fallback_start": "Horaires fixes utilisés dès que le plan ne peut pas décider : API injoignable, prix non publiés, ou plage qu'il n'a pas pu remplir. Laissez les deux champs vides pour désactiver le repli.",
+          "fallback_end": "Fin des horaires fixes de repli. Une fin antérieure au début correspond à une plage de nuit.",
           "require_complete_data": "Laisse l'appareil à l'arrêt tant que tous les prix de la plage ne sont pas publiés, pour ne pas manquer les créneaux les moins chers."
         }
       },
@@ -81,8 +87,11 @@
           "mode": "Mode de sélection",
           "target_entity": "Entité à piloter",
           "hours": "Durée de fonctionnement",
+          "extra_hours": "Prolongation après les créneaux",
           "window_start": "Début de la plage",
           "window_end": "Fin de la plage",
+          "fallback_start": "Début du repli",
+          "fallback_end": "Fin du repli",
           "max_price": "Prix maximum",
           "threshold_price": "Prix seuil",
           "require_complete_data": "Attendre que toute la plage soit tarifée"
@@ -91,10 +100,13 @@
           "name": "Sert de nom d'appareil, par exemple « Chauffe-eau ».",
           "target_entity": "Si vous la laissez vide, le plan expose seulement un capteur binaire à utiliser dans vos propres automatisations.",
           "hours": "Durée quotidienne à programmer dans la plage.",
+          "extra_hours": "Maintient l'appareil en marche pendant cette durée après le dernier créneau retenu, quel que soit le prix. Utile pour un chauffe-eau dont on ne connaît pas la température, pour être sûr qu'il a fini de chauffer.",
           "window_start": "Début de la plage quotidienne dans laquelle Sobry peut choisir les créneaux. Indiquez le même début et la même fin pour une journée entière.",
           "window_end": "Fin de la plage quotidienne. Une fin antérieure au début correspond à une plage de nuit.",
           "max_price": "Aucun créneau au-dessus de ce prix n'est retenu. Laissez vide pour toujours programmer la durée demandée.",
           "threshold_price": "Utilisé uniquement par le mode « sous un prix seuil ».",
+          "fallback_start": "Horaires fixes utilisés dès que le plan ne peut pas décider : API injoignable, prix non publiés, ou plage qu'il n'a pas pu remplir. Laissez les deux champs vides pour désactiver le repli.",
+          "fallback_end": "Fin des horaires fixes de repli. Une fin antérieure au début correspond à une plage de nuit.",
           "require_complete_data": "Laisse l'appareil à l'arrêt tant que tous les prix de la plage ne sont pas publiés, pour ne pas manquer les créneaux les moins chers."
         }
       },
@@ -119,6 +131,11 @@
     }
   },
   "entity": {
+    "binary_sensor": {
+      "plan_fallback": {
+        "name": "Repli horaires fixes"
+      }
+    },
     "sensor": {
       "plan_next_start": {
         "name": "Prochain démarrage"
@@ -160,6 +177,10 @@
         "hours": {
           "name": "Durée",
           "description": "Nombre d'heures à sélectionner."
+        },
+        "extra_hours": {
+          "name": "Prolongation",
+          "description": "Heures de fonctionnement à ajouter après le dernier créneau retenu."
         },
         "window_start": {
           "name": "Début de la plage",

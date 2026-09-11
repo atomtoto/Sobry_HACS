@@ -27,6 +27,17 @@ get_cheapest_slots:
           step: 0.25
           mode: box
           unit_of_measurement: h
+    extra_hours:
+      required: false
+      default: 0
+      example: 2
+      selector:
+        number:
+          min: 0
+          max: 12
+          step: 0.25
+          mode: box
+          unit_of_measurement: h
     window_start:
       required: false
       example: "22:00:00"

@@ -18,6 +18,7 @@ from homeassistant.helpers import config_validation as cv, selector
 from homeassistant.util import dt as dt_util
 
 from .const import (
+    CONF_EXTRA_HOURS,
     CONF_HOURS,
     CONF_MAX_PRICE,
     CONF_MODE,
@@ -25,6 +26,7 @@ from .const import (
     CONF_THRESHOLD_PRICE,
     CONF_WINDOW_END,
     CONF_WINDOW_START,
+    DEFAULT_EXTRA_HOURS,
     DEFAULT_HOURS,
     DOMAIN,
     MODE_CHEAPEST_SLOTS,
@@ -43,6 +45,7 @@ GET_CHEAPEST_SLOTS_SCHEMA = vol.Schema(
         ),
         vol.Optional(CONF_MODE, default=MODE_CHEAPEST_SLOTS): vol.In(PLAN_MODES),
         vol.Optional(CONF_HOURS, default=DEFAULT_HOURS): vol.Coerce(float),
+        vol.Optional(CONF_EXTRA_HOURS, default=DEFAULT_EXTRA_HOURS): vol.Coerce(float),
         vol.Optional(CONF_WINDOW_START): cv.time,
         vol.Optional(CONF_WINDOW_END): cv.time,
         vol.Optional(CONF_MAX_PRICE): vol.Coerce(float),
@@ -102,6 +105,7 @@ def async_setup_services(hass: HomeAssistant) -> None:
             window_end=window_end,
             max_price=call.data.get(CONF_MAX_PRICE),
             threshold_price=call.data.get(CONF_THRESHOLD_PRICE),
+            extra_hours=call.data[CONF_EXTRA_HOURS],
             require_complete_data=call.data[CONF_REQUIRE_COMPLETE_DATA],
         )
 
@@ -111,7 +115,7 @@ def async_setup_services(hass: HomeAssistant) -> None:
             "period_end": result.period_end.astimezone(tz).isoformat(),
             "data_complete": result.data_complete,
             "active": result.is_active(now),
-            "planned_hours": round(result.selected_hours, 3),
+            "planned_hours": round(result.scheduled_hours, 3),
             "average_price": (
                 round(result.average_price, 6) if result.average_price is not None else None
             ),

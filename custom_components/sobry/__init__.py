@@ -24,9 +24,17 @@ PLATFORMS: list[Platform] = [
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Sobry from a config entry."""
     coordinator = SobryDataUpdateCoordinator(hass, entry)
-    await coordinator.async_config_entry_first_refresh()
+    configs = plan_configs(entry)
 
-    plans = [SobryPlan(hass, entry, coordinator, config) for config in plan_configs(entry)]
+    if configs:
+        # Appliances must be driven even when the API cannot be reached: the
+        # entities are set up anyway, and their fixed fallback schedule takes
+        # over until prices come back.
+        await coordinator.async_refresh()
+    else:
+        await coordinator.async_config_entry_first_refresh()
+
+    plans = [SobryPlan(hass, entry, coordinator, config) for config in configs]
     for plan in plans:
         plan.async_recalculate()
 

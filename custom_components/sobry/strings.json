@@ -51,8 +51,11 @@
           "mode": "Selection mode",
           "target_entity": "Entity to control",
           "hours": "Runtime",
+          "extra_hours": "Extra runtime after the cheap slots",
           "window_start": "Window start",
           "window_end": "Window end",
+          "fallback_start": "Fallback start",
+          "fallback_end": "Fallback end",
           "max_price": "Maximum price",
           "threshold_price": "Price threshold",
           "require_complete_data": "Wait for the whole window to be priced"
@@ -61,10 +64,13 @@
           "name": "Used as the device name, for instance \"Water heater\".",
           "target_entity": "Left empty, the plan only publishes a binary sensor you can use in your own automations.",
           "hours": "Daily runtime to schedule during the window.",
+          "extra_hours": "Keeps the appliance running that long after the last selected slot, whatever the price. Useful for a water heater whose temperature you cannot read, to be sure it finished heating.",
           "window_start": "Start of the daily window Sobry may pick slots in. Keep the same start and end for a full day.",
           "window_end": "End of the daily window. A window ending before it starts runs overnight.",
           "max_price": "Slots above this price are never selected. Leave empty to always run the requested hours.",
           "threshold_price": "Used by the \"below a price threshold\" mode only.",
+          "fallback_start": "Fixed schedule used whenever the plan cannot decide: unreachable API, prices not published, or a window it could not fill. Leave both times empty to disable it.",
+          "fallback_end": "End of the fixed fallback schedule. An end before the start runs overnight.",
           "require_complete_data": "Hold the appliance off until every price of the window is published, so the cheapest slots are not missed."
         }
       },
@@ -81,8 +87,11 @@
           "mode": "Selection mode",
           "target_entity": "Entity to control",
           "hours": "Runtime",
+          "extra_hours": "Extra runtime after the cheap slots",
           "window_start": "Window start",
           "window_end": "Window end",
+          "fallback_start": "Fallback start",
+          "fallback_end": "Fallback end",
           "max_price": "Maximum price",
           "threshold_price": "Price threshold",
           "require_complete_data": "Wait for the whole window to be priced"
@@ -91,10 +100,13 @@
           "name": "Used as the device name, for instance \"Water heater\".",
           "target_entity": "Left empty, the plan only publishes a binary sensor you can use in your own automations.",
           "hours": "Daily runtime to schedule during the window.",
+          "extra_hours": "Keeps the appliance running that long after the last selected slot, whatever the price. Useful for a water heater whose temperature you cannot read, to be sure it finished heating.",
           "window_start": "Start of the daily window Sobry may pick slots in. Keep the same start and end for a full day.",
           "window_end": "End of the daily window. A window ending before it starts runs overnight.",
           "max_price": "Slots above this price are never selected. Leave empty to always run the requested hours.",
           "threshold_price": "Used by the \"below a price threshold\" mode only.",
+          "fallback_start": "Fixed schedule used whenever the plan cannot decide: unreachable API, prices not published, or a window it could not fill. Leave both times empty to disable it.",
+          "fallback_end": "End of the fixed fallback schedule. An end before the start runs overnight.",
           "require_complete_data": "Hold the appliance off until every price of the window is published, so the cheapest slots are not missed."
         }
       },
@@ -119,6 +131,11 @@
     }
   },
   "entity": {
+    "binary_sensor": {
+      "plan_fallback": {
+        "name": "Fixed-schedule fallback"
+      }
+    },
     "sensor": {
       "plan_next_start": {
         "name": "Next start"
@@ -160,6 +177,10 @@
         "hours": {
           "name": "Runtime",
           "description": "Number of hours to select."
+        },
+        "extra_hours": {
+          "name": "Extra runtime",
+          "description": "Hours to keep running after the last selected slot."
         },
         "window_start": {
           "name": "Window start",
