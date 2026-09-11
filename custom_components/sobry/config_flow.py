@@ -15,6 +15,9 @@ from homeassistant.helpers import selector
 from .const import (
     CONF_API_KEY,
     CONF_DISPLAY,
+    CONF_EXTRA_HOURS,
+    CONF_FALLBACK_END,
+    CONF_FALLBACK_START,
     CONF_GRANULARITY,
     CONF_HOURS,
     CONF_MAX_PRICE,
@@ -31,6 +34,7 @@ from .const import (
     CONF_WINDOW_END,
     CONF_WINDOW_START,
     DEFAULT_DISPLAY,
+    DEFAULT_EXTRA_HOURS,
     DEFAULT_GRANULARITY,
     DEFAULT_HOURS,
     DEFAULT_PROFIL,
@@ -42,6 +46,7 @@ from .const import (
     DEFAULT_WINDOW_END,
     DEFAULT_WINDOW_START,
     DOMAIN,
+    MAX_EXTRA_HOURS,
     MAX_HOURS,
     MAX_PRICE_LIMIT,
     MODE_CHEAPEST_SLOTS,
@@ -103,12 +108,23 @@ def _plan_schema() -> vol.Schema:
                     unit_of_measurement="h",
                 )
             ),
+            vol.Required(CONF_EXTRA_HOURS, default=DEFAULT_EXTRA_HOURS): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=0,
+                    max=MAX_EXTRA_HOURS,
+                    step=0.25,
+                    mode=selector.NumberSelectorMode.BOX,
+                    unit_of_measurement="h",
+                )
+            ),
             vol.Required(CONF_WINDOW_START, default=DEFAULT_WINDOW_START): selector.TimeSelector(),
             vol.Required(CONF_WINDOW_END, default=DEFAULT_WINDOW_END): selector.TimeSelector(),
             vol.Optional(CONF_MAX_PRICE): PRICE_SELECTOR,
             vol.Required(
                 CONF_THRESHOLD_PRICE, default=DEFAULT_THRESHOLD_PRICE
             ): PRICE_SELECTOR,
+            vol.Optional(CONF_FALLBACK_START): selector.TimeSelector(),
+            vol.Optional(CONF_FALLBACK_END): selector.TimeSelector(),
             vol.Required(
                 CONF_REQUIRE_COMPLETE_DATA, default=DEFAULT_REQUIRE_COMPLETE_DATA
             ): selector.BooleanSelector(),

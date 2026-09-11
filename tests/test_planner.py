@@ -228,6 +228,55 @@ class TestPlanning(unittest.TestCase):
         )
         self.assertEqual(result.selected_hours, 4)
 
+    def test_extra_hours_extend_the_last_window(self) -> None:
+        result = planner.build_plan(
+            self.slots,
+            _local("2026-01-15T09:00:00"),
+            PARIS,
+            hours=6,
+            extra_hours=2,
+        )
+        # 6 cheapest hours are 00:00 -> 06:00, extended to 08:00.
+        self.assertEqual(len(result.windows), 1)
+        self.assertEqual(result.windows[0].start, _local("2026-01-15T00:00:00"))
+        self.assertEqual(result.windows[0].end, _local("2026-01-15T08:00:00"))
+        self.assertEqual(result.scheduled_hours, 8)
+        self.assertTrue(result.is_active(_local("2026-01-15T07:30:00")))
+        # The expensive extension is taken into account in the average price.
+        self.assertGreater(result.average_price, 0.05)
+
+    def test_extra_hours_extend_past_the_price_series(self) -> None:
+        prices = [0.30] * 23 + [0.01]
+        slots = planner.build_slots(_series("2026-01-15", prices))
+        result = planner.build_plan(
+            slots,
+            _local("2026-01-15T09:00:00"),
+            PARIS,
+            hours=1,
+            extra_hours=2,
+        )
+        self.assertEqual(result.windows[0].start, _local("2026-01-15T23:00:00"))
+        self.assertEqual(result.windows[0].end, _local("2026-01-16T02:00:00"))
+        self.assertTrue(result.is_active(_local("2026-01-16T01:00:00")))
+
+    def test_extra_hours_merge_with_the_next_period(self) -> None:
+        slots = planner.build_slots(
+            _series("2026-01-15", [0.30] * 23 + [0.01])
+            + _series("2026-01-16", [0.01] + [0.30] * 23)
+        )
+        result = planner.build_plan(
+            slots,
+            _local("2026-01-15T09:00:00"),
+            PARIS,
+            hours=1,
+            extra_hours=1,
+        )
+        # Today runs 23:00 -> 00:00 plus one extra hour, tomorrow runs
+        # 00:00 -> 01:00 plus its own extra hour: one single window.
+        self.assertEqual(len(result.windows), 1)
+        self.assertEqual(result.windows[0].start, _local("2026-01-15T23:00:00"))
+        self.assertEqual(result.windows[0].end, _local("2026-01-16T02:00:00"))
+
     def test_quarter_hourly_series(self) -> None:
         prices = [0.4] * 96
         for index in range(8, 16):  # 02:00 -> 04:00

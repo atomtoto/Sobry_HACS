@@ -117,8 +117,13 @@ class PlanResult:
 
     @property
     def selected_hours(self) -> float:
-        """Return the total planned runtime."""
+        """Return the total duration of the selected slots."""
         return sum(slot.hours for slot in self.selected)
+
+    @property
+    def scheduled_hours(self) -> float:
+        """Return the total runtime, extensions beyond the prices included."""
+        return sum(window.hours for window in self.windows)
 
     @property
     def average_price(self) -> float | None:
@@ -265,6 +270,51 @@ def merge_windows(selected: list[PriceSlot]) -> list[PlanWindow]:
     return windows
 
 
+def merge_overlapping(windows: list[PlanWindow]) -> list[PlanWindow]:
+    """Merge windows that overlap or touch, keeping a weighted price."""
+    merged: list[PlanWindow] = []
+    for window in sorted(windows, key=lambda item: item.start):
+        if merged and window.start <= merged[-1].end:
+            previous = merged[-1]
+            hours = previous.hours + window.hours
+            price = (
+                (previous.price * previous.hours + window.price * window.hours) / hours
+                if hours
+                else previous.price
+            )
+            merged[-1] = PlanWindow(previous.start, max(previous.end, window.end), price)
+            continue
+        merged.append(window)
+    return merged
+
+
+def extend_last_window(
+    result: PlanResult, slots: list[PriceSlot], extra_hours: float
+) -> None:
+    """Keep the device running ``extra_hours`` after the last planned slot.
+
+    The extension is a duration, not a selection: it still applies when the
+    price series stops before the end of the extension.
+    """
+    if extra_hours <= 0 or not result.windows:
+        return
+
+    extension_end = result.windows[-1].end + timedelta(hours=extra_hours)
+    selected = set(result.selected)
+    extra = [
+        slot
+        for slot in slots
+        if result.windows[-1].end <= slot.start < extension_end and slot not in selected
+    ]
+    if extra:
+        result.selected = sorted(selected.union(extra), key=lambda slot: slot.start)
+        result.windows = merge_windows(result.selected)
+
+    last = result.windows[-1]
+    if last.end < extension_end:
+        result.windows[-1] = PlanWindow(last.start, extension_end, last.price)
+
+
 def _cheapest_slots(candidates: list[PriceSlot], hours: float) -> list[PriceSlot]:
     """Return the cheapest slots adding up to ``hours``, in any order."""
     selected: list[PriceSlot] = []
@@ -342,6 +392,7 @@ def build_plan(
     window_end: time = time(0, 0),
     max_price: float | None = None,
     threshold_price: float | None = None,
+    extra_hours: float = 0.0,
     require_complete_data: bool = True,
 ) -> PlanResult:
     """Plan when a device should run, for the current window occurrence.
@@ -359,6 +410,7 @@ def build_plan(
         hours=hours,
         max_price=max_price,
         threshold_price=threshold_price,
+        extra_hours=extra_hours,
         require_complete_data=require_complete_data,
     )
 
@@ -372,12 +424,15 @@ def build_plan(
             hours=hours,
             max_price=max_price,
             threshold_price=threshold_price,
+            extra_hours=extra_hours,
             require_complete_data=True,
         )
         if upcoming.data_complete:
-            result.selected.extend(upcoming.selected)
-            result.selected.sort(key=lambda slot: slot.start)
-            result.windows = merge_windows(result.selected)
+            result.selected = sorted(
+                set(result.selected).union(upcoming.selected),
+                key=lambda slot: slot.start,
+            )
+            result.windows = merge_overlapping(result.windows + upcoming.windows)
 
     return result
 
@@ -391,6 +446,7 @@ def _plan_period(
     hours: float,
     max_price: float | None,
     threshold_price: float | None,
+    extra_hours: float,
     require_complete_data: bool,
 ) -> PlanResult:
     """Plan a single window occurrence."""
@@ -436,6 +492,7 @@ def _plan_period(
 
     result.selected = sorted(selected, key=lambda slot: slot.start)
     result.windows = merge_windows(result.selected)
+    extend_last_window(result, slots, extra_hours)
     if not result.selected and result.reason is None:
         result.reason = "no_slot_selected"
     return result

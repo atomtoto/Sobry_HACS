@@ -21,6 +21,9 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.util import dt as dt_util
 
 from .const import (
+    CONF_EXTRA_HOURS,
+    CONF_FALLBACK_END,
+    CONF_FALLBACK_START,
     CONF_HOURS,
     CONF_MAX_PRICE,
     CONF_MODE,
@@ -31,6 +34,7 @@ from .const import (
     CONF_THRESHOLD_PRICE,
     CONF_WINDOW_END,
     CONF_WINDOW_START,
+    DEFAULT_EXTRA_HOURS,
     DEFAULT_HOURS,
     DEFAULT_REQUIRE_COMPLETE_DATA,
     DEFAULT_THRESHOLD_PRICE,
@@ -42,7 +46,7 @@ from .const import (
     NAME,
 )
 from .coordinator import SobryDataUpdateCoordinator
-from .planner import PlanResult, build_plan
+from .planner import PlanResult, PlanWindow, build_plan, period_bounds
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -57,10 +61,17 @@ def local_timezone():
 
 def parse_time(value: Any, default: str) -> time:
     """Parse a ``HH:MM(:SS)`` option, falling back to ``default``."""
-    parsed = dt_util.parse_time(str(value)) if value is not None else None
+    parsed = optional_time(value)
     if parsed is None:
         parsed = dt_util.parse_time(default)
     return parsed or time(0, 0)
+
+
+def optional_time(value: Any) -> time | None:
+    """Parse a ``HH:MM(:SS)`` option that may be left empty."""
+    if value in (None, ""):
+        return None
+    return dt_util.parse_time(str(value))
 
 
 def _as_float(value: Any, default: float | None = None) -> float | None:
@@ -95,6 +106,12 @@ class SobryPlan:
         self.window_start = parse_time(config.get(CONF_WINDOW_START), DEFAULT_WINDOW_START)
         self.window_end = parse_time(config.get(CONF_WINDOW_END), DEFAULT_WINDOW_END)
         self.max_price = _as_float(config.get(CONF_MAX_PRICE))
+        self.extra_hours = (
+            _as_float(config.get(CONF_EXTRA_HOURS), DEFAULT_EXTRA_HOURS) or 0.0
+        )
+        # Fixed schedule used whenever the plan cannot decide on its own.
+        self.fallback_start = optional_time(config.get(CONF_FALLBACK_START))
+        self.fallback_end = optional_time(config.get(CONF_FALLBACK_END))
         self.require_complete_data = bool(
             config.get(CONF_REQUIRE_COMPLETE_DATA, DEFAULT_REQUIRE_COMPLETE_DATA)
         )
@@ -112,6 +129,8 @@ class SobryPlan:
         self._applied_state: bool | None = None
         self._last_control_error: str | None = None
         self._active: bool | None = None
+        self._fallback_active = False
+        self._fallback_window: tuple[datetime, datetime] | None = None
         self._listeners: list[Callable[[], None]] = []
 
         self.result: PlanResult | None = None
@@ -156,9 +175,27 @@ class SobryPlan:
         return self._active
 
     @property
+    def has_fallback(self) -> bool:
+        """Return whether a fixed fallback schedule is configured."""
+        return (
+            self.fallback_start is not None
+            and self.fallback_end is not None
+            and self.fallback_start != self.fallback_end
+        )
+
+    @property
+    def fallback_active(self) -> bool:
+        """Return whether the fixed schedule is currently driving the plan."""
+        return self._fallback_active
+
+    @property
     def available(self) -> bool:
-        """Return whether a price series is known."""
-        return self.coordinator.data is not None
+        """Return whether the plan knows what the appliance should do.
+
+        A plan running on its fixed fallback schedule stays available: it is
+        precisely the case where the prices are missing.
+        """
+        return self.result is not None or self._fallback_window is not None
 
     async def async_set_hours(self, hours: float) -> None:
         """Change the scheduled runtime."""
@@ -221,31 +258,69 @@ class SobryPlan:
     def async_recalculate(self, now: datetime | None = None) -> None:
         """Recompute the schedule from the latest prices."""
         moment = now or dt_util.utcnow()
+        timezone = local_timezone()
         slots = self.coordinator.price_slots
-        if not slots:
-            self.result = None
-            self._active = None
-            return
 
-        self.result = build_plan(
-            slots,
-            moment,
-            local_timezone(),
-            mode=self.mode,
-            hours=self._hours,
-            window_start=self.window_start,
-            window_end=self.window_end,
-            max_price=self.max_price,
-            threshold_price=self._threshold_price,
-            require_complete_data=self.require_complete_data,
+        self.result = (
+            build_plan(
+                slots,
+                moment,
+                timezone,
+                mode=self.mode,
+                hours=self._hours,
+                window_start=self.window_start,
+                window_end=self.window_end,
+                max_price=self.max_price,
+                threshold_price=self._threshold_price,
+                extra_hours=self.extra_hours,
+                require_complete_data=self.require_complete_data,
+            )
+            if slots
+            else None
         )
-        self._active = self.result.is_active(moment)
+
+        self._fallback_window = None
+        self._fallback_active = False
+
+        if self.has_fallback and self._is_blind(moment):
+            assert self.fallback_start is not None and self.fallback_end is not None
+            window = period_bounds(
+                moment, self.fallback_start, self.fallback_end, timezone
+            )
+            self._fallback_window = window
+            self._fallback_active = window[0] <= moment < window[1]
+            self._active = self._fallback_active
+        elif self.result is None:
+            self._active = None
+        else:
+            self._active = self.result.is_active(moment)
+
+    def _is_blind(self, moment: datetime) -> bool:
+        """Return True when the plan has no usable schedule for right now.
+
+        That is what the fixed fallback schedule is there for: an unreachable
+        API, prices that stop before the current moment, or a window the plan
+        could not fill.
+        """
+        if self.mode != MODE_THRESHOLD and self._hours <= 0:
+            # A zero runtime is an explicit "do not run", not a failure.
+            return False
+        if self.result is None:
+            return True
+        if self.result.is_active(moment):
+            return False
+        if not self.result.windows:
+            return True
+        # Prices that do not cover the current moment cannot be trusted.
+        return not any(slot.contains(moment) for slot in self.coordinator.price_slots)
 
     async def async_update(self, now: datetime | None = None) -> None:
-        """Recompute the schedule, drive the target and refresh the entities."""
+        """Recompute the schedule, refresh the entities and drive the target."""
         self.async_recalculate(now)
-        await self.async_apply_control()
+        # Publish the new schedule before driving the appliance: a slow or
+        # unresponsive device must not hold the entity states back.
         self.async_notify_listeners()
+        await self.async_apply_control()
 
     async def async_start_control(self) -> None:
         """Start driving the target entity once the entities are set up."""
@@ -295,17 +370,23 @@ class SobryPlan:
     @property
     def next_start(self) -> datetime | None:
         """Return the start of the next planned run."""
+        now = dt_util.utcnow()
+        if self._fallback_window is not None:
+            start = self._fallback_window[0]
+            return start if start > now else None
         if self.result is None:
             return None
-        window = self.result.next_window(dt_util.utcnow())
+        window = self.result.next_window(now)
         return window.start if window else None
 
     @property
     def next_end(self) -> datetime | None:
         """Return the end of the running window, else of the next one."""
+        now = dt_util.utcnow()
+        if self._fallback_window is not None:
+            return self._fallback_window[1]
         if self.result is None:
             return None
-        now = dt_util.utcnow()
         current = self.result.current_window(now)
         if current is not None:
             return current.end
@@ -315,11 +396,16 @@ class SobryPlan:
     @property
     def average_price(self) -> float | None:
         """Return the average price of the planned slots."""
+        if self._fallback_window is not None:
+            # The fixed schedule runs whatever the price is.
+            return None
         return self.result.average_price if self.result else None
 
     def as_attributes(self) -> dict[str, Any]:
         """Return the plan details exposed on the binary sensor."""
         tz = local_timezone()
+        next_start = self.next_start
+        next_end = self.next_end
         attributes: dict[str, Any] = {
             "mode": self.mode,
             "control_enabled": self._control_enabled,
@@ -327,38 +413,53 @@ class SobryPlan:
             "window_start": self.window_start.isoformat(),
             "window_end": self.window_end.isoformat(),
             "requested_hours": round(self._hours, 3),
+            "extra_hours": round(self.extra_hours, 3),
+            "fallback_active": self._fallback_active,
+            "next_start": next_start.astimezone(tz).isoformat() if next_start else None,
+            "next_end": next_end.astimezone(tz).isoformat() if next_end else None,
         }
+        if self.has_fallback and self.fallback_start and self.fallback_end:
+            attributes["fallback_start"] = self.fallback_start.isoformat()
+            attributes["fallback_end"] = self.fallback_end.isoformat()
         if self.mode == MODE_THRESHOLD:
             attributes["threshold_price"] = self._threshold_price
         else:
             attributes["max_price"] = self.max_price
 
+        if self._fallback_window is not None:
+            # The fixed schedule is in charge: report it as the planned window.
+            fallback = PlanWindow(*self._fallback_window, 0.0)
+            attributes["planned_hours"] = round(fallback.hours, 3)
+            attributes["planned_average_price"] = None
+            attributes["slots"] = []
+            attributes["windows"] = [
+                {
+                    "start": fallback.start.astimezone(tz).isoformat(),
+                    "end": fallback.end.astimezone(tz).isoformat(),
+                    "hours": round(fallback.hours, 3),
+                }
+            ]
+        elif self.result is not None:
+            attributes["planned_hours"] = round(self.result.scheduled_hours, 3)
+            attributes["planned_average_price"] = (
+                round(self.result.average_price, 6)
+                if self.result.average_price is not None
+                else None
+            )
+            attributes["slots"] = [slot.as_dict(tz) for slot in self.result.selected]
+            attributes["windows"] = [
+                window.as_dict(tz) for window in self.result.windows
+            ]
+
         if self.result is None:
             attributes["reason"] = "no_prices"
             return attributes
 
-        result = self.result
-        next_start = self.next_start
-        next_end = self.next_end
-        attributes.update(
-            {
-                "period_start": result.period_start.astimezone(tz).isoformat(),
-                "period_end": result.period_end.astimezone(tz).isoformat(),
-                "data_complete": result.data_complete,
-                "planned_hours": round(result.selected_hours, 3),
-                "planned_average_price": (
-                    round(result.average_price, 6)
-                    if result.average_price is not None
-                    else None
-                ),
-                "next_start": next_start.astimezone(tz).isoformat() if next_start else None,
-                "next_end": next_end.astimezone(tz).isoformat() if next_end else None,
-                "slots": [slot.as_dict(tz) for slot in result.selected],
-                "windows": [window.as_dict(tz) for window in result.windows],
-            }
-        )
-        if result.reason:
-            attributes["reason"] = result.reason
+        attributes["period_start"] = self.result.period_start.astimezone(tz).isoformat()
+        attributes["period_end"] = self.result.period_end.astimezone(tz).isoformat()
+        attributes["data_complete"] = self.result.data_complete
+        if self.result.reason:
+            attributes["reason"] = self.result.reason
         return attributes
 
 
